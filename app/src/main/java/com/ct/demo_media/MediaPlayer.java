@@ -8,6 +8,7 @@ import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Environment;
 import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.Toast;
@@ -21,11 +22,12 @@ import java.util.Calendar;
  * 管理类
  */
 
-public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfoListener, android.media.MediaPlayer.OnCompletionListener {
+public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfoListener, android.media.MediaPlayer.OnCompletionListener, android.media.MediaPlayer.OnPreparedListener, android.media.MediaPlayer.OnInfoListener, android.media.MediaPlayer.OnErrorListener {
     private static final String TAG = "CTAS";
     public static MediaPlayer mMediaplayer = new MediaPlayer();
     private SurfaceHolder mSurfaceHolder;
     private SurfaceView mSurfaceView;
+    private Surface mSurface;  //真正显示视屏数据的类
     private android.media.MediaPlayer mSysMediaPlayer ;
     public static MediaPlayer getInstance(){
         return mMediaplayer;
@@ -53,11 +55,19 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
     private static final  String MEDIA_PLAYING = "PLAYING"; // 播放状态
     private static final  String MEDIA_PAUSED = "PAUSED"; // 暂停状态
     private static final  String MEDIA_STOPPED = "STOPPED"; // 停止状态
+    private static final String MEDIA_ERROR = "ERROR"; //失败状态
     private String currentMediaPlayerState = MEDIA_IDLE;
 
 
     // 播放到的进度
     private int mProgress;
+
+
+
+    // 会加载3次 要是3次还是加载不出来的话 说明有问题
+    private int mCourentCount = 0;
+
+    private static final  int TOTAL_COUNT=3;
 
 
     public void setMediaRecorderListener(MediaRecorderListener mediaRecorderListener){
@@ -244,6 +254,7 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
     public void surfaceCreated(SurfaceHolder surfaceHolder) {
 
         mSurfaceHolder = surfaceHolder;
+        mSurface = mSurfaceHolder.getSurface();
         Log.e(TAG,"surfaceCreated surface重新创建");
     }
     @Override
@@ -279,4 +290,154 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
         // 视频播放完成状态
         currentMediaPlayerState = MEDIA_STOPPED;
     }
+
+
+    // 加载mediaplayer的资源
+    public void load(){
+        if(!MEDIA_IDLE.equals(currentMediaPlayerState)){
+            return ;
+        }
+        try{
+            setCurrentMediaPlayerState(MEDIA_IDLE);
+            checkMediaPlayer();
+
+
+        }catch(Exception e){
+
+        }
+
+
+
+    }
+    //检查mediaplayer是否已经被创建了
+    private synchronized void checkMediaPlayer() {
+        if(mSysMediaPlayer==null){
+            mSysMediaPlayer = createMediaPlayer();
+        }
+    }
+
+    public android.media.MediaPlayer createMediaPlayer(){
+        mSysMediaPlayer = new android.media.MediaPlayer();
+        mSysMediaPlayer.reset();
+        mSysMediaPlayer.setOnPreparedListener(this);
+        mSysMediaPlayer.setOnCompletionListener(this);
+        mSysMediaPlayer.setOnInfoListener(this);
+        mSysMediaPlayer.setOnErrorListener(this);
+        mSysMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        if (mSurface != null && mSurface.isValid()) {
+            mSysMediaPlayer.setSurface(mSurface);
+        } else {
+            stop();
+        }
+        return mSysMediaPlayer;
+
+
+
+    }
+
+    public void setCurrentMediaPlayerState(String state){
+        this.currentMediaPlayerState = state;
+    }
+
+    @Override
+    public void onPrepared(android.media.MediaPlayer mp) {
+        mSysMediaPlayer = mp;
+        if(mSysMediaPlayer!=null){
+            mCourentCount = 0;
+            // 准备好以后就是暂停的状态
+            setCurrentMediaPlayerState(MEDIA_PAUSED);
+            
+            // 去播放视频
+            decideCanPlay();
+            
+            
+        }
+        
+
+    }
+    //是否能够播放视频   可以考虑在wifi环境下去播放视频等等
+    private void decideCanPlay() {
+        resume();
+    }
+    // 播放视频的状态
+    private void resume() {
+        if (!MEDIA_PAUSED.equals(currentMediaPlayerState)){
+            return ;
+        }
+        if(!isPlaying()){
+            setCurrentMediaPlayerState(MEDIA_PLAYING);
+            mSysMediaPlayer.start();
+            // 在播放的状态中有可能出现error
+        }
+    }
+
+
+    // 判断当前的mediaplayer是否在播放状态中
+    public boolean isPlaying(){
+        if(mSysMediaPlayer!=null && mSysMediaPlayer.isPlaying()){
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean onInfo(android.media.MediaPlayer mp, int what, int extra) {
+        return false;
+    }
+
+    @Override
+    public boolean onError(android.media.MediaPlayer mp, int what, int extra) {
+        // 返回true 由自己去处理
+        setCurrentMediaPlayerState(MEDIA_ERROR);
+        if(mCourentCount>=TOTAL_COUNT){
+            // 告诫外界知道
+            // 显示视屏加载不了的界面
+//            if(listener!=null){
+//                listener.onVideoLoadFailed();
+//            }
+//            showPauseOrPlayView();
+        }
+        stop();// 释放资源
+        return true;
+    }
+
+    /**
+     * 清空状态 释放资源
+     */
+    public void stop() {
+        // 清空掉我们当前的mediaplayer
+        Log.e("CTAS", "do stop");
+        if (this.mSysMediaPlayer!=null){
+            this.mSysMediaPlayer.reset();
+            this.mSysMediaPlayer.setOnSeekCompleteListener(null);
+            this.mSysMediaPlayer.stop();
+            this.mSysMediaPlayer.release();
+            this.mSysMediaPlayer = null;
+        }
+        // 回到最原始的状态
+        setCurrentMediaPlayerState(MEDIA_IDLE);
+        // 去重新load
+        if(mCourentCount < TOTAL_COUNT){
+            mCourentCount+=1;
+            load();
+        } else{
+            // 显示暂停中的界面  并且提示当前的视频加载不了
+        }
+
+    }
+
+    public void pause(){
+        if(!MEDIA_PLAYING.equals(currentMediaPlayerState)){
+            return ;
+        }
+        setCurrentMediaPlayerState(MEDIA_PLAYING);
+        if(isPlaying()){
+            mSysMediaPlayer.pause();
+        }
+        // 展示暂停中的页面
+
+
+
+    }
+
 }

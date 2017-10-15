@@ -25,7 +25,4 @@ public class FrontActivity extends AppCompatActivity {
         SecondaryActivity.gotoSecondary(this);
     }
 
-
-
-
 }
