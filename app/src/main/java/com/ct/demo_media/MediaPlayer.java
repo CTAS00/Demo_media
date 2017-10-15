@@ -21,7 +21,7 @@ import java.util.Calendar;
  * 管理类
  */
 
-public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfoListener {
+public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfoListener, android.media.MediaPlayer.OnCompletionListener {
     private static final String TAG = "CTAS";
     public static MediaPlayer mMediaplayer = new MediaPlayer();
     private SurfaceHolder mSurfaceHolder;
@@ -35,6 +35,7 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
         mMediaRecorder = new MediaRecorder();
 //        initMeidaRecorderSettings(mMediaRecorder);
         mSysMediaPlayer = new android.media.MediaPlayer();
+        mSysMediaPlayer.setOnCompletionListener(this);
     }
     private Camera mCamera;
     private Context mContext;
@@ -42,6 +43,26 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
     private boolean isRecord = false;
 
     private String path;
+    private MediaRecorderListener mMediaRecorderListener ;
+
+
+
+
+    // 视频播放时候的状态
+    private static final  String MEDIA_IDLE = "IDLE"; // 初始状态
+    private static final  String MEDIA_PLAYING = "PLAYING"; // 播放状态
+    private static final  String MEDIA_PAUSED = "PAUSED"; // 暂停状态
+    private static final  String MEDIA_STOPPED = "STOPPED"; // 停止状态
+    private String currentMediaPlayerState = MEDIA_IDLE;
+
+
+    // 播放到的进度
+    private int mProgress;
+
+
+    public void setMediaRecorderListener(MediaRecorderListener mediaRecorderListener){
+        this.mMediaRecorderListener = mediaRecorderListener;
+    }
 
     public void initContext(Context context){
         this.mContext = context;
@@ -84,7 +105,6 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
             //设置记录会话的最大持续时间（毫秒）
             mRecorder.setMaxDuration(30 * 1000);
 //          mMediaRecorder.setPreviewDisplay(mSurfaceHolder.getSurface());
-
         } catch (Exception e) {
             e.printStackTrace();
             Log.e(TAG,e.getMessage());
@@ -110,6 +130,7 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
         return date;
     }
     public void startRecord(){
+        // 在开始录制的状态下进行操作
         if (!isRecord) {
             try {
                 isRecord = true;
@@ -119,6 +140,9 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
                 mMediaRecorder.prepare();
                 mMediaRecorder.start();
                 ToastUtils.s(mContext,"开始录制视频");
+                if (mMediaRecorderListener!=null){
+                    mMediaRecorderListener.start();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
                 Log.e(TAG,e.getMessage());
@@ -134,6 +158,10 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
         if (isRecord) {
             try {
                 mMediaRecorder.stop();
+                if (mMediaRecorderListener!=null){
+                    File file = new File(path);
+                    mMediaRecorderListener.end(file);
+                }
 //                mMediaRecorder.reset();
 //                mMediaRecorder.release();
                 isRecord = false;
@@ -148,6 +176,37 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
         }
     }
 
+    // 判断视频是否播放完成
+    public boolean isMediaPlayerCompletion(){
+        boolean isCompletion = false;
+        if (MEDIA_STOPPED.equals(currentMediaPlayerState) || mProgress <= mSysMediaPlayer.getDuration()) {
+            isCompletion = true;
+        }
+        return isCompletion;
+
+    }
+
+    // 暂停视频的播放
+    public void pauseMediaPlayer(){
+        if (mSysMediaPlayer !=null && MEDIA_PLAYING.equals(currentMediaPlayerState) && mSysMediaPlayer.isPlaying()) {
+            currentMediaPlayerState = MEDIA_PAUSED;
+            mSysMediaPlayer.stop();
+            Log.e("CTAS", "pauseMediaPlayer");
+        }
+    }
+    // 恢复视频的播放
+    public void resumeMediaPlayer(){
+        if (MEDIA_PAUSED.equals(currentMediaPlayerState)&& mSysMediaPlayer !=null ) {
+            currentMediaPlayerState = MEDIA_PLAYING;
+            mSysMediaPlayer.start();
+            Log.e("CTAS", "resumeMediaPlayer");
+            if (!isMediaPlayerCompletion()) {
+                Log.e("CTAS", "resumeMediaPlayer   seektoResume");
+                playRecord(mProgress);
+//                mSysMediaPlayer.seekTo(mProgress);
+            }
+        }
+    }
     // 播放视频
     public void playRecord() {
         mSysMediaPlayer.reset();
@@ -161,11 +220,31 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
             e.printStackTrace();
         }
         mSysMediaPlayer.start();
+        currentMediaPlayerState = MEDIA_PLAYING;
+    }
 
+
+    // 带有position的播放视频
+    public void playRecord(int position) {
+        mSysMediaPlayer.reset();
+        Uri uri = Uri.parse(path);
+        mSysMediaPlayer = mSysMediaPlayer.create(mContext, uri);
+        mSysMediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        mSysMediaPlayer.setDisplay(mSurfaceHolder);
+        try{
+            mSysMediaPlayer.prepare();
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        mSysMediaPlayer.start();
+        mSysMediaPlayer.seekTo(position);
+        currentMediaPlayerState = MEDIA_PLAYING;
     }
     @Override
     public void surfaceCreated(SurfaceHolder surfaceHolder) {
+
         mSurfaceHolder = surfaceHolder;
+        Log.e(TAG,"surfaceCreated surface重新创建");
     }
     @Override
     public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
@@ -185,10 +264,19 @@ public class MediaPlayer implements SurfaceHolder.Callback, MediaRecorder.OnInfo
             mMediaRecorder = null;
             Log.e(TAG,"surfaceDestroyed release mMediaRecorder");
         }
+        // 界面回到后台时候的处理
+        mProgress = mSysMediaPlayer.getCurrentPosition();
+        Log.e(TAG,"当前的播放进度"+ mProgress);
     }
 
     @Override
     public void onInfo(MediaRecorder mediaRecorder, int i, int i1) {
 
+    }
+
+    @Override
+    public void onCompletion(android.media.MediaPlayer mediaPlayer) {
+        // 视频播放完成状态
+        currentMediaPlayerState = MEDIA_STOPPED;
     }
 }
