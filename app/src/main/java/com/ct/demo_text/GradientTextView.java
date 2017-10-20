@@ -29,7 +29,7 @@ public class GradientTextView extends TextView {
     private float mTextWidth;
 
     private PorterDuffXfermode xformode;
-    private String mText = "哈哈哈啊哈哈哈";
+    private String mText = "本人自愿向中银消费金融申请贷款，提供真实资料，遵守合约，统一上报征信。";
 
     public GradientTextView(Context ctx)
     {
@@ -47,7 +47,7 @@ public class GradientTextView extends TextView {
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         xformode = new PorterDuffXfermode(PorterDuff.Mode.SRC_IN);
 
-        initViewAndDatas();
+       initViewAndDatas();
 
         setOnClickListener(new View.OnClickListener(){
 
@@ -62,8 +62,8 @@ public class GradientTextView extends TextView {
 
     public void initViewAndDatas()
     {
-        mPaint.setColor(Color.CYAN);
-        mPaint.setTextSize(40.0f);
+        mPaint.setColor(Color.YELLOW);
+        mPaint.setTextSize(60.0f);
         mPaint.setStyle(Paint.Style.FILL_AND_STROKE);
         mPaint.setXfermode(null);
         mPaint.setTextAlign(Paint.Align.LEFT);
@@ -137,11 +137,14 @@ public class GradientTextView extends TextView {
 
         Bitmap srcBitmap = Bitmap.createBitmap(getWidth(),getHeight(), Bitmap.Config.ARGB_8888);
         Canvas srcCanvas = new Canvas(srcBitmap);
-        srcCanvas.drawText(mText, 0, getPaddingTop(), mPaint);
+//        srcCanvas.drawText(mText, 0, getPaddingTop(), mPaint);
+        // y是基线的位置
+        srcCanvas.drawText(mText, 0, 100, mPaint);
+        Log.e("CTAS","基线的位置 =" + getPaddingTop());
 
         mPaint.setXfermode(xformode);
         mPaint.setColor(Color.RED);
-        RectF rectF = new RectF(0,0,postIndex,mTextHeight);
+        RectF rectF = new RectF(0,100,postIndex,mTextHeight);
         srcCanvas.drawRect(rectF, mPaint);
         canvas.drawBitmap(srcBitmap,getPaddingLeft(),getPaddingTop(), null);
         initViewAndDatas();
